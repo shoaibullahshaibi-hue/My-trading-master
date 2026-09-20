@@ -1,4 +1,44 @@
-yfinance
-pandas
-matplotlib
-streamlit
+import streamlit as st
+from binance.client import Client
+import pandas as pd
+import matplotlib.pyplot as plt
+
+st.set_page_config(page_title="ICT Mobile", page_icon="📱", layout="centered")
+st.title("🏦 ICT SMC Mobile")
+
+symbol = st.sidebar.selectbox("Pair", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"])
+timeframe = st.sidebar.selectbox("Timeframe", ["15m", "1h", "4h", "1d"])
+
+@st.cache_data(ttl=60)
+def get_data(sym, tf):
+    client = Client()
+    klines = client.get_klines(symbol=sym, interval=tf, limit=100)
+    df = pd.DataFrame(klines, columns=['time', 'Open', 'High', 'Low', 'Close', 'Volume', 'close_time', 'qav', 'num_trades', 'taker_base', 'taker_quote', 'ignore'])
+    df['time'] = pd.to_datetime(df['time'], unit='ms')
+    df.set_index('time', inplace=True)
+    for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+        df[col] = df[col].astype(float)
+    return df
+
+df = get_data(symbol, timeframe)
+
+if df is not None:
+    current_price = df['Close'].iloc[-1]
+    swing_high = df['High'].rolling(20).max().iloc[-1]
+    swing_low = df['Low'].rolling(20).min().iloc[-1]
+    equilibrium = (swing_high + swing_low) / 2
+
+    col1, col2 = st.columns(2)
+    col1.metric("💰 Price", f"${current_price:,.2f}")
+    col2.metric("📊 State", "DISCOUNT 🟢" if current_price < equilibrium else "PREMIUM 🔴")
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+    ax.plot(df.index, df['Close'], color='white', linewidth=1.5)
+    ax.axhline(y=equilibrium, color='yellow', linestyle='--', linewidth=1)
+    ax.axhline(y=swing_high, color='#00ff88', linestyle=':', linewidth=1)
+    ax.axhline(y=swing_low, color='#ff4444', linestyle=':', linewidth=1)
+    ax.set_facecolor('#0e1117')
+    fig.patch.set_facecolor('#0e1117')
+    ax.tick_params(colors='white', labelsize=8)
+    plt.tight_layout()
+    st.pyplot(fig)
